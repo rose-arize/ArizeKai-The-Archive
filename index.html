@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ARIZE KAI // THE ARCHIVE</title>
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
+    <style>
+        :root {
+            --bg: #000000;
+            --surface: #0a0a0a;
+            --card: #111111;
+            --border: #1a1a1a;
+            --text-main: #ffffff;
+            --text-dim: #666666;
+            --accent: #333333;
+        }
+
+        body {
+            background-color: var(--bg);
+            color: var(--text-main);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            margin: 0; padding: 20px;
+            display: flex; flex-direction: column; align-items: center;
+        }
+
+        .container { width: 100%; max-width: 600px; }
+
+        .header { padding: 30px 0 20px 0; }
+        h1 { font-size: 28px; font-weight: 800; letter-spacing: -1px; margin: 0; }
+        .sub { color: var(--text-dim); font-size: 14px; margin-top: 5px; font-weight: 500; }
+
+        /* HORIZONTAL SCROLL FOR CATEGORIES */
+        .category-scroll {
+            display: flex; overflow-x: auto; gap: 10px;
+            padding-bottom: 15px; margin-bottom: 10px;
+            scrollbar-width: none; /* Hides scrollbar on Firefox */
+        }
+        .category-scroll::-webkit-scrollbar { display: none; /* Hides scrollbar on Chrome/Safari */ }
+        
+        .cat-btn {
+            background: var(--card); border: 1px solid var(--border);
+            color: var(--text-dim); padding: 10px 20px; border-radius: 20px;
+            font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer;
+            transition: 0.2s;
+        }
+        .cat-btn.active { background: #ffffff; color: #000000; }
+
+        /* VERTICAL DOSSIER LIST */
+        .list-container { display: flex; flex-direction: column; gap: 10px; }
+        
+        .card {
+            background: var(--card); border-radius: 16px; padding: 18px;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        
+        .user-info { display: flex; flex-direction: column; }
+        .display-name { font-size: 16px; font-weight: 600; margin-bottom: 2px; }
+        .username { font-size: 12px; color: var(--text-dim); }
+
+        .rank {
+            font-size: 11px; font-weight: 700; padding: 6px 12px;
+            border-radius: 8px; text-transform: uppercase; letter-spacing: 0.5px;
+            background: var(--surface); color: var(--text-dim);
+        }
+
+        /* Rank Colors (Minimalist) */
+        .rank.emperor { color: #ff3b30; }
+        .rank.instructor { color: #a855f7; }
+        .rank.staff { color: #ff9f0a; }
+        .rank.diamond { color: #0a84ff; }
+        .rank.gold { color: #ffd60a; }
+        .rank.silver { color: #98989d; }
+        .rank.bronze { color: #bf5af2; }
+        .rank.tryout { color: #ff453a; opacity: 0.8; }
+
+        /* Floating Admin Button */
+        .fab {
+            position: fixed; bottom: 30px; right: 20px;
+            background: #ffffff; color: #000000; width: 50px; height: 50px;
+            border-radius: 25px; display: flex; justify-content: center; align-items: center;
+            font-size: 24px; font-weight: 300; cursor: pointer; box-shadow: 0 10px 20px rgba(0,0,0,0.5);
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="header">
+        <h1>The Archive</h1>
+        <div class="sub" id="countText">Syncing secure connection...</div>
+    </div>
+
+    <div class="category-scroll">
+        <div class="cat-btn active" onclick="filterList('All', this)">All Operatives</div>
+        <div class="cat-btn" onclick="filterList('Leadership', this)">Leadership</div>
+        <div class="cat-btn" onclick="filterList('Staff', this)">Staff</div>
+        <div class="cat-btn" onclick="filterList('Students', this)">Students</div>
+        <div class="cat-btn" onclick="filterList('Guest', this)">Guests</div>
+    </div>
+
+    <div class="list-container" id="rosterList">
+        </div>
+</div>
+
+<div class="fab" onclick="alert('Connect to Admin Terminal to add new ranks.')">+</div>
+
+<script>
+    // --- FIREBASE CONFIG (YOUR KEYS) ---
+    const firebaseConfig = {
+      apiKey: "AIzaSyBUpHJRhnzrVbJyimYNlsW6x6eZgUQOlvc",
+      authDomain: "arize-kai.firebaseapp.com",
+      projectId: "arize-kai",
+      storageBucket: "arize-kai.firebasestorage.app",
+      messagingSenderId: "1068535893228",
+      appId: "1:1068535893228:web:78e4ffc7f41c581a97e9c9"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    // --- THE MASSIVE DOJO MANIFEST ---
+    const baseRoster = [
+        { name: "hlxzp", sub: "hlxzp", rank: "Emperor", style: "emperor", group: "Leadership" },
+        { name: "kyx", sub: "kyx.zo", rank: "Emperor's Hand", style: "emperor", group: "Leadership" },
+        { name: "Rose_Official", sub: "lookinfordevs", rank: "Instructor", style: "instructor", group: "Leadership" },
+        
+        { name: "seo", sub: "s_eora", rank: "Moderator", style: "staff", group: "Staff" },
+        { name: "Hulkyboi", sub: "samkoc", rank: "Recruiter", style: "staff", group: "Staff" },
+        { name: "Kjeldacott", sub: "kjeldacott", rank: "Recruiter", style: "staff", group: "Staff" },
+
+        { name: ".vyxzz", sub: ".vyxzz", rank: "Diamond student", style: "diamond", group: "Students" },
+        { name: "sazunix", sub: "sazunix", rank: "Gold student", style: "gold", group: "Students" },
+        { name: "skibidiohio3123", sub: "skibidiohio3123", rank: "Gold student", style: "gold", group: "Students" },
+        { name: "speed", sub: ".cuay", rank: "Gold student", style: "gold", group: "Students" },
+        { name: "Pikachu", sub: "pikachu033369", rank: "Gold student", style: "gold", group: "Students" },
+        { name: "ķana'", sub: "tanikasosa", rank: "Gold student", style: "gold", group: "Students" },
+        { name: "Carl", sub: "carl069571", rank: "Gold student", style: "gold", group: "Students" },
+
+        { name: "9nvt7", sub: "9nvt7", rank: "Silver student", style: "silver", group: "Students" },
+        { name: "Gan_dondondon", sub: "gan_dondondon_33430", rank: "Silver student", style: "silver", group: "Students" },
+        { name: "EGEFORLIFE17", sub: "egeforlife17", rank: "Silver student", style: "silver", group: "Students" },
+
+        { name: "golden", sub: "trustgolden", rank: "Bronze student", style: "bronze", group: "Students" },
+        { name: "panda", sub: "omgpanda2000", rank: "Bronze student", style: "bronze", group: "Students" },
+        { name: "♰", sub: "rcxas", rank: "Bronze student", style: "bronze", group: "Students" },
+        { name: "bouga2323", sub: "bouga2323", rank: "Bronze student", style: "bronze", group: "Students" },
+        { name: "Dndndfnffn", sub: "1_v11", rank: "Bronze student", style: "bronze", group: "Students" },
+        { name: "Caliio", sub: ".asapcaliio", rank: "Bronze student", style: "bronze", group: "Students" },
+
+        { name: "Mousaab", sub: "mousaab0960_83606", rank: "Tryout Needed", style: "tryout", group: "Guest" },
+        { name: ".s 🦨 .", sub: "sar1na13", rank: "Tryout Needed", style: "tryout", group: "Guest" },
+
+        { name: "albi", sub: "alkatraz_08", rank: "Guest", style: "", group: "Guest" },
+        { name: "yin", sub: "alexkindacooks", rank: "Guest", style: "", group: "Guest" },
+        { name: "pyro", sub: "simplypyro1", rank: "Guest", style: "", group: "Guest" },
+        { name: "Ibby", sub: "bricker_1912", rank: "Guest", style: "", group: "Guest" },
+        { name: "ItsTrulyDamz", sub: "dom1z0", rank: "Guest", style: "", group: "Guest" },
+        { name: "Azar", sub: "azar05353", rank: "Guest", style: "", group: "Guest" },
+        { name: "bazz", sub: "bazzornzer", rank: "Guest", style: "", group: "Guest" },
+        { name: "Lenkie7", sub: "kleindigga", rank: "Guest", style: "", group: "Guest" },
+        { name: "env ♛ 🗡", sub: "envz.7", rank: "Guest", style: "", group: "Guest" },
+        { name: "ztex", sub: "ztex._.", rank: "Guest", style: "", group: "Guest" },
+        { name: "Leon", sub: "zeno_leon", rank: "Guest", style: "", group: "Guest" },
+        { name: "Dizal", sub: "dizalll", rank: "Guest", style: "", group: "Guest" },
+        { name: "†𝕿𝖍𝖊𝕭𝖑𝖆𝖈𝖐𝕾𝖍𝖆𝖉𝖔", sub: "xplazo_abuser", rank: "Guest", style: "", group: "Guest" },
+        { name: "Lie", sub: "wrongfullie", rank: "Guest", style: "", group: "Guest" },
+        { name: "Bl00d", sub: "shea1k", rank: "Guest", style: "", group: "Guest" },
+        { name: "LeoDabesh", sub: "leo2finefr", rank: "Guest", style: "", group: "Guest" },
+        { name: "Godz", sub: "itslaurent99", rank: "Guest", style: "", group: "Guest" },
+        { name: "𝒴𝑒𝑒𝓏𝓎", sub: "yeezy00777", rank: "Guest", style: "", group: "Guest" },
+        { name: "izzel", sub: "Recent join", rank: "Guest", style: "", group: "Guest" },
+        { name: "LunarEclipse", sub: "Recent join", rank: "Guest", style: "", group: "Guest" },
+        { name: "Goat", sub: "Recent join", rank: "Guest", style: "", group: "Guest" },
+        { name: "1734", sub: "Recent join", rank: "Guest", style: "", group: "Guest" },
+        { name: "Amitay", sub: "Recent join", rank: "Guest", style: "", group: "Guest" },
+        { name: "𝐒𝐥𝐚𝐬𝐡𝐡", sub: "Recent join", rank: "Guest", style: "", group: "Guest" }
+    ];
+
+    let fullRoster = [...baseRoster];
+
+    // Listen to Firebase for ANY newly added members, combining them with the base list
+    db.collection("dossier").onSnapshot((snapshot) => {
+        let liveRoster = [];
+        snapshot.forEach((doc) => {
+            liveRoster.push(doc.data());
+        });
+        
+        // Combine base list + database list
+        fullRoster = [...liveRoster, ...baseRoster];
+        document.getElementById('countText').innerText = `${fullRoster.length} IDENTIFIED OPERATIVES`;
+        renderList('All');
+    });
+
+    function renderList(filterGroup) {
+        const container = document.getElementById('rosterList');
+        container.innerHTML = "";
+        
+        fullRoster.forEach(member => {
+            if (filterGroup === 'All' || member.group === filterGroup) {
+                container.innerHTML += `
+                    <div class="card">
+                        <div class="user-info">
+                            <span class="display-name">${member.name}</span>
+                            <span class="username">${member.sub}</span>
+                        </div>
+                        <span class="rank ${member.style}">${member.rank}</span>
+                    </div>
+                `;
+            }
+        });
+    }
+
+    function filterList(group, element) {
+        // Remove active class from all buttons
+        document.querySelectorAll('.cat-btn').forEach(btn => btn.classList.remove('active'));
+        // Add active class to clicked button
+        element.classList.add('active');
+        // Re-render
+        renderList(group);
+    }
+</script>
+
+</body>
+</html>
